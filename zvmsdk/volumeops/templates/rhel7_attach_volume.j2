@@ -60,18 +60,41 @@ else
 fi
 
 # wait for the devices ready
-SourceDevices=(`ls /dev/disk/by-path/ | grep "ccw-0.0.$fcp-zfcp-.*:$lun"`)
-SourceDevice="/dev/disk/by-path/${SourceDevices[0]}"
-if [[ ! -e $SourceDevice ]]; then
-    maxTime=20
-    while [ $maxTime -gt 0]
-    do
-      if [[ -e $SourceDevice ]]; then
+exit_code=1
+for j in ${ActiveWWPNs[@]}
+do
+    x="/dev/disk/by-path/ccw-0.0.$fcp-zfcp-$j:$lun"
+	# the x would be like:
+	# ccw-0.0.1d13-zfcp-0x5005076306035388:0x4014400400000000
+	# ccw-0.0.1d13-zfcp-0x5005076306035388:0x4014400400000000-part1
+	# ccw-0.0.1d13-zfcp-0x5005076306105388:0x4014400400000000
+	# ccw-0.0.1d13-zfcp-0x5005076306105388:0x4014400400000000-part1
+    echo "try disk path:$x"
+    if [[ -e $x ]];then
+        diskPath=$x
+		exit_code=0
+        echo "Found disk path is: $diskPath"
         break
-      fi
-      sleep 2
-      ((maxTime-=2))
+    fi
+done
+if [ $exit_code -ne 0 ]; then
+    sleep 5
+    echo "wait and retry again to know if the devices are ready..."
+    for j in ${ActiveWWPNs[@]}
+    do
+        x="/dev/disk/by-path/ccw-0.0.$fcp-zfcp-$j:$lun"
+        echo "try disk path:$x"
+        if [[ -e $x ]];then
+            diskPath=$x
+    		exit_code=0
+            echo "Found disk path is: $diskPath"
+            break
+        fi
     done
+fi
+if [ $exit_code -ne 0 ]; then
+    echo "error happens when attach, exit code: $exit_code"
+    exit $exit_code
 fi
 
 # ensure multipathd service is up
@@ -124,4 +147,4 @@ fi
 udevadm control --reload
 udevadm trigger --sysname-match=dm-*
 
-exit 0
+exit $exit_code
